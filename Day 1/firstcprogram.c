@@ -1,8 +1,5 @@
 /* A First C Program - for Homework 1
- *
- * This code will start you off.  Modify it as instructed in Homework 1.
- * 
- * Put your name here: Professor Shafer
+ * Put your name here: Wenhao Li
  * CS-5008 Spring 2025
  */
 
@@ -13,14 +10,18 @@
 
 int main() {
 
-    int x;                          // x will be the value entered by the user
+    int x, y;                       // x and y will be the values entered by the user
     char s[100];                    // s is used to "pause" the console so it doesn't exit too quickly
 
     /* Ask for a number and print it out */
     printf("Enter a number: ");     // prompt the user
     scanf("%d", &x);                // read a number from the console ("stdin")
     fgets(s,100,stdin);             // sadly, we have to remove the \n that scanf leaves in stdin
-    printf("You entered %d\n", x);  // tell the user what number they just entered
+    printf("Enter the other number: ");  // tell the user what number they just entered
+    scanf("%d", &y);                // read a number from the console ("stdin")
+    fgets(s,100,stdin);             // sadly, we have to remove the \n that scanf leaves in stdin
+    printf("Their sum is %d\n", x + y);  // tell the user what number they just entered
+
     
     /* Normally I would not put a comment on every line of code.
        I just did it above because you are learning C for the first time.
