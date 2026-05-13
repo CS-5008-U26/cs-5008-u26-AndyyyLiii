@@ -20,7 +20,7 @@ int main() {
     printf("Enter the other number: ");  // tell the user what number they just entered
     scanf("%d", &y);                // read a number from the console ("stdin")
     fgets(s,100,stdin);             // sadly, we have to remove the \n that scanf leaves in stdin
-    printf("Their sum is %d\n", x + y);  // tell the user what number they just entered
+    printf("Their sum is %d\n", x + y);  // tell the user what is the sum of the two numbers they entered
 
     
     /* Normally I would not put a comment on every line of code.
