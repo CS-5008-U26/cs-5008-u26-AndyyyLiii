@@ -2,6 +2,7 @@
 
 int main () {
     double rate,hours;
+
     while (1) {
     printf("Enter the hourly rate: ");
     scanf("%lf", &rate);
@@ -17,18 +18,12 @@ int main () {
         break;
     }
 
-    if (hours<=40) {
+    if (hours <= 40) {
         printf("Paycheck: $%.2lf\n", rate*hours);
     } else {
         printf("Paycheck: $%.2lf\n", (rate*40)+(rate*1.5*(hours-40)));
-    }    /* code */
-    }
+    }   
     
-
-    
-
-   
-  
-    
+}
     return 0;   
 }
