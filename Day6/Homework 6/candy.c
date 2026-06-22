@@ -1,27 +1,18 @@
 /* candy.c
-   Reads the candy-data.csv file and stores all candies in an array of
-   Candy pointers. The first line is column names and is skipped.
+   Reads candy-data.csv (the "Halloween Candy Rankings" data) and
+   stores each candy in a heap-allocated struct. The array holds
+   pointers to those structs, and every candy name is also on the
+   heap. The first line of the file is column names and is skipped.
 
-   Task 1:
-   The program reads all candies from the file and stores the data in
-   structs. Each struct is stored on the heap. The candy name string is
-   also stored on the heap. After reading the file, the program prints
-   the names of all candies.
-
-   Task 2:
-   The program lists all chocolate candies. If a chocolate candy also
-   has caramel, its name is printed in upper-case. If it does not have
-   caramel, its name is printed in lower-case. The program also prints
-   the percent of chocolate candies that also have caramel.
-
-   Task 3:
-   For each attribute from fields 2 through 10, the program prints the
-   average sugar percent, price percent, and win percent for candies
-   that have that attribute. The program also prints the same summary
-   values for candies whose sugar percent is higher than the average
-   sugar percent, and candies whose price percent is higher than the
-   average price percent.
-
+   Task 1: read the file, close it, and print every candy name.
+   Task 2: list the chocolate candies (upper-case if they also have
+           caramel, lower-case if not) and print the percent of
+           chocolate candies that also have caramel.
+   Task 3: for each of the nine boolean attributes, print the average
+           sugar/price/win percent of the candies that have it; then
+           print the same averages over the candies whose sugar
+           percent is above the overall average, and again over the
+           candies whose price percent is above the overall average.
    History:
      Wenhao   June 2026   Created
 */
@@ -31,14 +22,13 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-/* Candy stores one row from candy-data.csv.
-   The name is stored as a string.
-   Fields 2 through 10 are stored as ints.
-   Fields 11 through 13 are stored as doubles.
-*/
-typedef struct Candy {
-    char *competitorname;
+#define MAX_CANDIES 200
 
+/* Candy holds one row of the file. The name is a heap string; the
+   nine attributes are booleans stored as ints; the three percents
+   are stored as doubles. */
+typedef struct {
+    char *name;
     int chocolate;
     int fruity;
     int caramel;
@@ -48,55 +38,36 @@ typedef struct Candy {
     int hard;
     int bar;
     int pluribus;
-
     double sugarpercent;
     double pricepercent;
     double winpercent;
 } Candy;
 
+/* The nine boolean attributes, in column order, for printing and for
+   looping in Task 3. */
+const char *FEATURE_NAMES[9] = {
+    "chocolate", "fruity", "caramel", "peanutalmondy", "nougat",
+    "crispedricewafer", "hard", "bar", "pluribus"
+};
+
 /* killNewline removes a trailing newline from a string, if present.
    fgets leaves the '\n' at the end of what it reads, so this trims it.
-   It also removes '\r' for Windows-style line endings.
    Parameters:
-     char *str   the string to trim, modified in place
+     char *str   the string to trim (modified in place)
    Returns:
      void
    Usage:
      killNewline(line);
 */
 void killNewline(char *str) {
-    int len = strlen(str);
-
-    while (len > 0 && (str[len - 1] == '\n' || str[len - 1] == '\r')) {
-        str[len - 1] = '\0';
-        len--;
+    if (strlen(str) > 0 && str[strlen(str) - 1] == '\n') {
+        str[strlen(str) - 1] = '\0';
     }
-}
-
-/* copyString copies a string to heap memory.
-   This is needed because all strings should be stored on the heap.
-   Parameters:
-     char *str   the string to copy
-   Returns:
-     char *   pointer to the new heap string
-   Usage:
-     candy->competitorname = copyString(field);
-*/
-char *copyString(char *str) {
-    char *newString = malloc(strlen(str) + 1);
-
-    if (newString == NULL) {
-        printf("Could not allocate memory for string.\n");
-        exit(1);
-    }
-
-    strcpy(newString, str);
-    return newString;
 }
 
 /* getNextField copies the next comma-separated field of a line into
-   out and returns a pointer to the rest of the line, just past the comma.
-   If the field is wrapped in double quotes, the quotes are removed.
+   out and returns a pointer to the rest of the line (just past the
+   comma). If the field is wrapped in double quotes, they are removed.
    Parameters:
      char *start   pointer to the start of the remaining line
      char *out     buffer that receives the next field
@@ -104,7 +75,10 @@ char *copyString(char *str) {
      char *   pointer to the rest of the line, or NULL if none remains
    Usage:
      char *p = line;
-     p = getNextField(p, field);
+     while (p != NULL) {
+         p = getNextField(p, field);
+         if (p != NULL) { ...use field... }
+     }
 */
 char *getNextField(char *start, char *out) {
     if (*start == '\0') {
@@ -125,10 +99,8 @@ char *getNextField(char *start, char *out) {
     }
 
     int outLen = strlen(out);
-
     if (outLen >= 2 && out[0] == '"' && out[outLen - 1] == '"') {
         out[outLen - 1] = '\0';
-
         for (int i = 0; out[i] != '\0'; i++) {
             out[i] = out[i + 1];
         }
@@ -137,39 +109,18 @@ char *getNextField(char *start, char *out) {
     return rest;
 }
 
-/* makeCandyFromLine creates one Candy struct from one CSV line.
-   The struct is stored on the heap. The candy name is also copied
-   to the heap.
+/* makeCandy parses one line of the file into a heap-allocated Candy.
+   The name (column 0) is copied onto the heap; columns 1-9 are read
+   as ints and columns 10-12 as doubles.
    Parameters:
-     char *line   one line from candy-data.csv
+     char *line   one data line of the file (header already skipped)
    Returns:
-     Candy *   pointer to the new Candy struct
+     Candy *   pointer to a newly allocated, filled-in Candy
    Usage:
-     candies[candyCount] = makeCandyFromLine(line);
+     Candy *c = makeCandy(line);
 */
-Candy *makeCandyFromLine(char *line) {
-    Candy *candy = malloc(sizeof(Candy));
-
-    if (candy == NULL) {
-        printf("Could not allocate memory for candy.\n");
-        exit(1);
-    }
-
-    candy->competitorname = NULL;
-
-    candy->chocolate = 0;
-    candy->fruity = 0;
-    candy->caramel = 0;
-    candy->peanutalmondy = 0;
-    candy->nougat = 0;
-    candy->crispedricewafer = 0;
-    candy->hard = 0;
-    candy->bar = 0;
-    candy->pluribus = 0;
-
-    candy->sugarpercent = 0.0;
-    candy->pricepercent = 0.0;
-    candy->winpercent = 0.0;
+Candy *makeCandy(char *line) {
+    Candy *c = malloc(sizeof(Candy));
 
     char field[1000];
     char *p = line;
@@ -177,375 +128,127 @@ Candy *makeCandyFromLine(char *line) {
 
     while (p != NULL) {
         p = getNextField(p, field);
-
         if (p != NULL) {
-            if (col == 0) {
-                candy->competitorname = copyString(field);
-            } else if (col == 1) {
-                candy->chocolate = atoi(field);
-            } else if (col == 2) {
-                candy->fruity = atoi(field);
-            } else if (col == 3) {
-                candy->caramel = atoi(field);
-            } else if (col == 4) {
-                candy->peanutalmondy = atoi(field);
-            } else if (col == 5) {
-                candy->nougat = atoi(field);
-            } else if (col == 6) {
-                candy->crispedricewafer = atoi(field);
-            } else if (col == 7) {
-                candy->hard = atoi(field);
-            } else if (col == 8) {
-                candy->bar = atoi(field);
-            } else if (col == 9) {
-                candy->pluribus = atoi(field);
-            } else if (col == 10) {
-                candy->sugarpercent = atof(field);
-            } else if (col == 11) {
-                candy->pricepercent = atof(field);
-            } else if (col == 12) {
-                candy->winpercent = atof(field);
+            switch (col) {
+                case 0:
+                    c->name = malloc(strlen(field) + 1);
+                    strcpy(c->name, field);
+                    break;
+                case 1:  c->chocolate = atoi(field);        break;
+                case 2:  c->fruity = atoi(field);           break;
+                case 3:  c->caramel = atoi(field);          break;
+                case 4:  c->peanutalmondy = atoi(field);    break;
+                case 5:  c->nougat = atoi(field);           break;
+                case 6:  c->crispedricewafer = atoi(field); break;
+                case 7:  c->hard = atoi(field);             break;
+                case 8:  c->bar = atoi(field);              break;
+                case 9:  c->pluribus = atoi(field);         break;
+                case 10: c->sugarpercent = atof(field);     break;
+                case 11: c->pricepercent = atof(field);     break;
+                case 12: c->winpercent = atof(field);       break;
             }
-
             col++;
         }
     }
 
-    return candy;
+    return c;
 }
 
-/* printAllCandyNames prints the name of every candy.
+/* featureValue returns the boolean attribute of a candy named by an
+   index 0-8 that matches FEATURE_NAMES. This lets Task 3 loop over
+   the nine attributes without repeating code.
    Parameters:
-     Candy **candies   array of Candy pointers
-     int candyCount    number of candies in the array
+     Candy *c    the candy to inspect
+     int index   which attribute (0 = chocolate, ... 8 = pluribus)
    Returns:
-     void
+     int   1 if the candy has that attribute, 0 otherwise
    Usage:
-     printAllCandyNames(candies, candyCount);
+     if (featureValue(c, 0)) { ... candy has chocolate ... }
 */
-void printAllCandyNames(Candy **candies, int candyCount) {
-    printf("All candies:\n");
-
-    for (int i = 0; i < candyCount; i++) {
-        printf("%s\n", candies[i]->competitorname);
+int featureValue(Candy *c, int index) {
+    switch (index) {
+        case 0: return c->chocolate;
+        case 1: return c->fruity;
+        case 2: return c->caramel;
+        case 3: return c->peanutalmondy;
+        case 4: return c->nougat;
+        case 5: return c->crispedricewafer;
+        case 6: return c->hard;
+        case 7: return c->bar;
+        case 8: return c->pluribus;
     }
-
-    printf("\n");
-}
-
-/* printUpperCase prints a string in upper-case.
-   The original string is not changed.
-   Parameters:
-     char *str   the string to print
-   Returns:
-     void
-   Usage:
-     printUpperCase(candyName);
-*/
-void printUpperCase(char *str) {
-    for (int i = 0; str[i] != '\0'; i++) {
-        printf("%c", toupper((unsigned char) str[i]));
-    }
-}
-
-/* printLowerCase prints a string in lower-case.
-   The original string is not changed.
-   Parameters:
-     char *str   the string to print
-   Returns:
-     void
-   Usage:
-     printLowerCase(candyName);
-*/
-void printLowerCase(char *str) {
-    for (int i = 0; str[i] != '\0'; i++) {
-        printf("%c", tolower((unsigned char) str[i]));
-    }
-}
-
-/* printChocolateCandies prints all chocolate candies.
-   If the candy also has caramel, the name is printed in upper-case.
-   If the candy does not have caramel, the name is printed in lower-case.
-   It also prints the percent of chocolate candies that also have caramel.
-   Parameters:
-     Candy **candies   array of Candy pointers
-     int candyCount    number of candies in the array
-   Returns:
-     void
-   Usage:
-     printChocolateCandies(candies, candyCount);
-*/
-void printChocolateCandies(Candy **candies, int candyCount) {
-    int chocolateCount = 0;
-    int chocolateAndCaramelCount = 0;
-
-    printf("Chocolate candies:\n");
-
-    for (int i = 0; i < candyCount; i++) {
-        if (candies[i]->chocolate == 1) {
-            chocolateCount++;
-
-            if (candies[i]->caramel == 1) {
-                chocolateAndCaramelCount++;
-                printUpperCase(candies[i]->competitorname);
-            } else {
-                printLowerCase(candies[i]->competitorname);
-            }
-
-            printf("\n");
-        }
-    }
-
-    if (chocolateCount > 0) {
-        double percent = (double) chocolateAndCaramelCount / chocolateCount * 100.0;
-        printf("\nPercent of chocolate candies that also have caramel: %.2f%%\n",
-               percent);
-    } else {
-        printf("\nNo chocolate candies found.\n");
-    }
-
-    printf("\n");
-}
-
-/* getAttributeValue returns the value of one attribute from a Candy.
-   Attribute numbers:
-     0 chocolate
-     1 fruity
-     2 caramel
-     3 peanutalmondy
-     4 nougat
-     5 crispedricewafer
-     6 hard
-     7 bar
-     8 pluribus
-   Parameters:
-     Candy *candy       pointer to one Candy
-     int attributeNum   the attribute number
-   Returns:
-     int   0 or 1
-   Usage:
-     value = getAttributeValue(candy, 0);
-*/
-int getAttributeValue(Candy *candy, int attributeNum) {
-    if (attributeNum == 0) {
-        return candy->chocolate;
-    } else if (attributeNum == 1) {
-        return candy->fruity;
-    } else if (attributeNum == 2) {
-        return candy->caramel;
-    } else if (attributeNum == 3) {
-        return candy->peanutalmondy;
-    } else if (attributeNum == 4) {
-        return candy->nougat;
-    } else if (attributeNum == 5) {
-        return candy->crispedricewafer;
-    } else if (attributeNum == 6) {
-        return candy->hard;
-    } else if (attributeNum == 7) {
-        return candy->bar;
-    } else if (attributeNum == 8) {
-        return candy->pluribus;
-    }
-
     return 0;
 }
 
-/* getAttributeName copies the name of an attribute into name.
+/* printUpper prints a string in upper case followed by a newline.
    Parameters:
-     int attributeNum   the attribute number
-     char *name         output buffer for the name
+     char *str   the string to print
    Returns:
      void
    Usage:
-     getAttributeName(0, name);
+     printUpper(c->name);
 */
-void getAttributeName(int attributeNum, char *name) {
-    if (attributeNum == 0) {
-        strcpy(name, "chocolate");
-    } else if (attributeNum == 1) {
-        strcpy(name, "fruity");
-    } else if (attributeNum == 2) {
-        strcpy(name, "caramel");
-    } else if (attributeNum == 3) {
-        strcpy(name, "peanutalmondy");
-    } else if (attributeNum == 4) {
-        strcpy(name, "nougat");
-    } else if (attributeNum == 5) {
-        strcpy(name, "crispedricewafer");
-    } else if (attributeNum == 6) {
-        strcpy(name, "hard");
-    } else if (attributeNum == 7) {
-        strcpy(name, "bar");
-    } else if (attributeNum == 8) {
-        strcpy(name, "pluribus");
-    } else {
-        strcpy(name, "unknown");
+void printUpper(char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        putchar(toupper((unsigned char) str[i]));
     }
+    putchar('\n');
 }
 
-/* printOneSummaryLine prints one summary line.
-   It receives the sums and the count, then calculates and prints
-   the averages.
+/* printLower prints a string in lower case followed by a newline.
    Parameters:
-     char *name        name of the group
-     double sugarSum   sum of sugarpercent
-     double priceSum   sum of pricepercent
-     double winSum     sum of winpercent
-     int count         number of candies in the group
+     char *str   the string to print
    Returns:
      void
    Usage:
-     printOneSummaryLine(name, sugarSum, priceSum, winSum, count);
+     printLower(c->name);
 */
-void printOneSummaryLine(char *name,
-                         double sugarSum,
-                         double priceSum,
-                         double winSum,
-                         int count) {
-    if (count == 0) {
-        printf("%-20s Count: %3d   No candies\n", name, count);
-    } else {
-        printf("%-20s Count: %3d   Avg sugar: %.4f   Avg price: %.4f   Avg win: %.4f\n",
-               name,
-               count,
-               sugarSum / count,
-               priceSum / count,
-               winSum / count);
+void printLower(char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        putchar(tolower((unsigned char) str[i]));
     }
+    putchar('\n');
 }
 
-/* printAttributeSummaries prints the average sugar percent, price percent,
-   and win percent for each attribute from fields 2 through 10.
-   For each attribute, only candies that have that attribute are counted.
+/* printAverages prints the average sugar, price and win percent over
+   the candies whose include flag is set. It is the shared worker for
+   all of Task 3.
    Parameters:
-     Candy **candies   array of Candy pointers
-     int candyCount    number of candies in the array
+     const char *label   text printed in front of the averages
+     Candy **candies      the array of candy pointers
+     int count            how many candies are in the array
+     int *include         per-candy flag: 1 = use it, 0 = skip it
    Returns:
      void
    Usage:
-     printAttributeSummaries(candies, candyCount);
+     printAverages("chocolate", candies, count, include);
 */
-void printAttributeSummaries(Candy **candies, int candyCount) {
-    printf("Attribute summaries:\n");
+void printAverages(const char *label, Candy **candies, int count, int *include) {
+    double sumSugar = 0.0;
+    double sumPrice = 0.0;
+    double sumWin = 0.0;
+    int n = 0;
 
-    for (int attributeNum = 0; attributeNum < 9; attributeNum++) {
-        double sugarSum = 0.0;
-        double priceSum = 0.0;
-        double winSum = 0.0;
-        int count = 0;
-
-        for (int i = 0; i < candyCount; i++) {
-            if (getAttributeValue(candies[i], attributeNum) == 1) {
-                sugarSum = sugarSum + candies[i]->sugarpercent;
-                priceSum = priceSum + candies[i]->pricepercent;
-                winSum = winSum + candies[i]->winpercent;
-                count++;
-            }
-        }
-
-        char attributeName[100];
-        getAttributeName(attributeNum, attributeName);
-
-        printOneSummaryLine(attributeName, sugarSum, priceSum, winSum, count);
-    }
-
-    printf("\n");
-}
-
-/* printAboveAverageSummaries prints summary information for candies whose
-   sugar percent is higher than the average sugar percent. It also prints
-   summary information for candies whose price percent is higher than the
-   average price percent.
-   Parameters:
-     Candy **candies   array of Candy pointers
-     int candyCount    number of candies in the array
-   Returns:
-     void
-   Usage:
-     printAboveAverageSummaries(candies, candyCount);
-*/
-void printAboveAverageSummaries(Candy **candies, int candyCount) {
-    double totalSugar = 0.0;
-    double totalPrice = 0.0;
-
-    for (int i = 0; i < candyCount; i++) {
-        totalSugar = totalSugar + candies[i]->sugarpercent;
-        totalPrice = totalPrice + candies[i]->pricepercent;
-    }
-
-    double averageSugar = totalSugar / candyCount;
-    double averagePrice = totalPrice / candyCount;
-
-    double highSugarSugarSum = 0.0;
-    double highSugarPriceSum = 0.0;
-    double highSugarWinSum = 0.0;
-    int highSugarCount = 0;
-
-    double highPriceSugarSum = 0.0;
-    double highPricePriceSum = 0.0;
-    double highPriceWinSum = 0.0;
-    int highPriceCount = 0;
-
-    for (int i = 0; i < candyCount; i++) {
-        if (candies[i]->sugarpercent > averageSugar) {
-            highSugarSugarSum = highSugarSugarSum + candies[i]->sugarpercent;
-            highSugarPriceSum = highSugarPriceSum + candies[i]->pricepercent;
-            highSugarWinSum = highSugarWinSum + candies[i]->winpercent;
-            highSugarCount++;
-        }
-
-        if (candies[i]->pricepercent > averagePrice) {
-            highPriceSugarSum = highPriceSugarSum + candies[i]->sugarpercent;
-            highPricePriceSum = highPricePriceSum + candies[i]->pricepercent;
-            highPriceWinSum = highPriceWinSum + candies[i]->winpercent;
-            highPriceCount++;
+    for (int i = 0; i < count; i++) {
+        if (include[i]) {
+            sumSugar = sumSugar + candies[i]->sugarpercent;
+            sumPrice = sumPrice + candies[i]->pricepercent;
+            sumWin = sumWin + candies[i]->winpercent;
+            n++;
         }
     }
 
-    printf("Overall average sugar percent: %.4f\n", averageSugar);
-    printf("Overall average price percent: %.4f\n\n", averagePrice);
-
-    printf("Above average summaries:\n");
-
-    printOneSummaryLine("sugar > average",
-                        highSugarSugarSum,
-                        highSugarPriceSum,
-                        highSugarWinSum,
-                        highSugarCount);
-
-    printOneSummaryLine("price > average",
-                        highPriceSugarSum,
-                        highPricePriceSum,
-                        highPriceWinSum,
-                        highPriceCount);
-
-    printf("\n");
-}
-
-/* freeCandies frees all heap memory used by the candy array.
-   Each candy name is freed first. Then each Candy struct is freed.
-   Finally, the array of Candy pointers is freed.
-   Parameters:
-     Candy **candies   array of Candy pointers
-     int candyCount    number of candies in the array
-   Returns:
-     void
-   Usage:
-     freeCandies(candies, candyCount);
-*/
-void freeCandies(Candy **candies, int candyCount) {
-    for (int i = 0; i < candyCount; i++) {
-        free(candies[i]->competitorname);
-        free(candies[i]);
+    if (n == 0) {
+        printf("%-22s (no candies)\n", label);
+        return;
     }
 
-    free(candies);
+    printf("%-22s avg sugar %.4f   avg price %.4f   avg win %.4f\n",
+           label, sumSugar / n, sumPrice / n, sumWin / n);
 }
 
-/* main asks the user for the CSV file name, opens the file, skips the
-   header line, reads all candy rows, and stores them in an array of
-   Candy pointers. Then it completes Task 1, Task 2, and Task 3.
-   Finally it frees all heap memory.
+/* main asks for the file name, skips the header, reads every candy
+   into a heap-allocated array of Candy pointers, then runs Tasks 1-3.
    Parameters:
      void
    Returns:
@@ -561,63 +264,97 @@ int main() {
     killNewline(buffer);
 
     FILE *inFile = fopen(buffer, "r");
-
     if (inFile == NULL) {
         printf("Could not open file: %s\n", buffer);
         return 1;
     }
 
-    int capacity = 100;
-    int candyCount = 0;
-
-    Candy **candies = malloc(sizeof(Candy *) * capacity);
-
-    if (candies == NULL) {
-        printf("Could not allocate memory for candy array.\n");
-        fclose(inFile);
-        return 1;
-    }
+    Candy *candies[MAX_CANDIES];
+    int count = 0;
 
     char line[1000];
 
-    /* Skip the first line because it contains the column names. */
+    /* discard the header line */
     fgets(line, 1000, inFile);
 
-    while (fgets(line, 1000, inFile) != NULL) {
+    /* read every data line into a heap Candy */
+    while (fgets(line, 1000, inFile) != NULL && count < MAX_CANDIES) {
         killNewline(line);
-
-        if (strlen(line) > 0) {
-            if (candyCount >= capacity) {
-                capacity = capacity * 2;
-
-                Candy **newCandies = realloc(candies, sizeof(Candy *) * capacity);
-
-                if (newCandies == NULL) {
-                    printf("Could not reallocate memory for candy array.\n");
-                    freeCandies(candies, candyCount);
-                    fclose(inFile);
-                    return 1;
-                }
-
-                candies = newCandies;
-            }
-
-            candies[candyCount] = makeCandyFromLine(line);
-            candyCount++;
+        if (strlen(line) == 0) {
+            continue;
         }
+        candies[count] = makeCandy(line);
+        count++;
     }
 
     fclose(inFile);
 
-    printAllCandyNames(candies, candyCount);
+    /* ---------- Task 1: print every candy name ---------- */
+    printf("All candies:\n");
+    for (int i = 0; i < count; i++) {
+        printf("%s\n", candies[i]->name);
+    }
 
-    printChocolateCandies(candies, candyCount);
+    /* ---------- Task 2: chocolate candies and caramel percent ---------- */
+    printf("\nChocolate candies (UPPER = has caramel, lower = no caramel):\n");
+    int chocolateCount = 0;
+    int chocCaramelCount = 0;
 
-    printAttributeSummaries(candies, candyCount);
+    for (int i = 0; i < count; i++) {
+        if (candies[i]->chocolate) {
+            chocolateCount++;
+            if (candies[i]->caramel) {
+                chocCaramelCount++;
+                printUpper(candies[i]->name);
+            } else {
+                printLower(candies[i]->name);
+            }
+        }
+    }
 
-    printAboveAverageSummaries(candies, candyCount);
+    if (chocolateCount > 0) {
+        double pct = 100.0 * chocCaramelCount / chocolateCount;
+        printf("\n%.2f%% of chocolate candies also have caramel.\n", pct);
+    }
 
-    freeCandies(candies, candyCount);
+    /* ---------- Task 3: summary information ---------- */
+    int include[MAX_CANDIES];
+
+    printf("\nAverages by attribute:\n");
+    for (int f = 0; f < 9; f++) {
+        for (int i = 0; i < count; i++) {
+            include[i] = featureValue(candies[i], f);
+        }
+        printAverages(FEATURE_NAMES[f], candies, count, include);
+    }
+
+    /* overall average sugar and price, used as the thresholds below */
+    double totalSugar = 0.0;
+    double totalPrice = 0.0;
+    for (int i = 0; i < count; i++) {
+        totalSugar = totalSugar + candies[i]->sugarpercent;
+        totalPrice = totalPrice + candies[i]->pricepercent;
+    }
+    double avgSugar = (count > 0) ? totalSugar / count : 0.0;
+    double avgPrice = (count > 0) ? totalPrice / count : 0.0;
+
+    printf("\nAverages over candies above the mean:\n");
+
+    for (int i = 0; i < count; i++) {
+        include[i] = (candies[i]->sugarpercent > avgSugar);
+    }
+    printAverages("sugar above average", candies, count, include);
+
+    for (int i = 0; i < count; i++) {
+        include[i] = (candies[i]->pricepercent > avgPrice);
+    }
+    printAverages("price above average", candies, count, include);
+
+    /* free the heap memory */
+    for (int i = 0; i < count; i++) {
+        free(candies[i]->name);
+        free(candies[i]);
+    }
 
     return 0;
 }
